@@ -2,7 +2,25 @@
 
 **Open:** double-click `Nomination Form Filler.html` and it opens in Chrome or Edge. It's one file with nothing to install, and it works without internet. Customer details stay on your computer and are never uploaded anywhere. You can copy the file to your Desktop or share it with your team.
 
+**Web link:** https://laimeitou1126.github.io/nomination-form-filler/
+
+## Fill in one form, step by step (the easiest way)
+
+The app opens on **Fill in a form, step by step**. It asks for the details in 5 short steps:
+
+1. **Policy & policyowner**
+2. **Nominees**: up to 4 nominees, whose shares must add up to 100%.
+3. **Trustee**: optional, so skip it if none is being appointed.
+4. **Witness**: usually the agent's name and IAC No.
+5. **Check & download**: fix anything in red, click **Preview the filled form**, tick the box, then click **Download filled PDF**.
+
+Each step has a short explanation at the top. Problems show up as you type, and a step that needs fixing is marked with "!". You can jump between steps by clicking the step names. Anything you leave empty stays blank on the form so it can be handwritten. **Start over** clears everything.
+
+Nothing you type is saved. If you close the page before downloading, the browser asks you to confirm first.
+
 ## Many customers at once (bulk)
+
+Open the **Upload files / many customers** tab.
 
 1. Click **Download bulk upload template (.xlsx)**. The template has one row per customer, and its second sheet, "How to fill", explains each column.
 2. Fill in the rows. Leave a cell empty if you don't know it; that box stays blank on the form.
@@ -26,7 +44,9 @@ It does **not** work with forms that have been printed and scanned, or with the 
 
 The form only has 2-digit birth years (e.g. "82"). These are read as 1982 or 2082, whichever isn't in the future, so check the ages look right.
 
-## One customer
+## One customer from files
+
+In the **Upload files / many customers** tab:
 
 1. Drop in the customer's files: an ePartner "Policy Detail Information" PDF, an already-filled nomination PDF, Excel or CSV. Files for the same policy are combined. Or click **Start a blank form** and type everything in.
 2. Check and complete the details on screen. The **Checks** panel updates as you type:

@@ -61,6 +61,23 @@ input.upper{text-transform:uppercase}
 .approve{display:flex;gap:8px;align-items:flex-start;margin:10px 0;font-size:14px}
 #log{list-style:none;padding:0;margin:0;font-size:12px;max-height:220px;overflow:auto}#log li{padding:3px 0;border-bottom:1px solid var(--line)}
 .note{font-size:12px;color:var(--mute);margin:8px 0 0}
+[hidden]{display:none!important}
+.tabs{background:var(--card);border-bottom:1px solid var(--line)}
+.tabs .in{max-width:1240px;margin:0 auto;padding:0 16px;display:flex;gap:4px;overflow-x:auto}
+.tab{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:10px 12px;color:var(--mute);font-weight:600;white-space:nowrap}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+main.wiz{display:block;max-width:860px}
+.wsteps{list-style:none;padding:0;margin:0 0 14px;display:flex;gap:6px;flex-wrap:wrap}
+.wsteps button{font-size:13px;padding:6px 12px;border-radius:999px}
+.wsteps button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.wsteps button.bad{border-color:var(--err);color:var(--err)}
+.wsteps button.on.bad{color:var(--accent-fg)}
+.hint{background:var(--missbg);border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 14px}
+.hint ul{margin:4px 0 0;padding-left:18px}
+.navrow{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+.navrow .spacer{flex:1}
+.wiz .grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.wiz input,.wiz select{padding:10px 11px;font-size:16px}
 </style>
 </head>
 <body>
@@ -70,7 +87,28 @@ input.upper{text-transform:uppercase}
   <div class="muted small">Works offline · customer data stays on this computer</div>
 </div></header>
 
-<main>
+<nav class="tabs" role="tablist"><div class="in">
+  <button type="button" class="tab on" data-tab="wizard" role="tab" aria-selected="true">Fill in a form, step by step</button>
+  <button type="button" class="tab" data-tab="bulk" role="tab" aria-selected="false">Upload files / many customers</button>
+</div></nav>
+
+<main id="wizard" class="wiz">
+  <ol id="wiz-steps" class="wsteps"></ol>
+  <section class="card">
+    <h2 id="wiz-title"></h2>
+    <div id="wiz-hint" class="hint"></div>
+    <form id="wiz-form" onsubmit="return false"></form>
+    <div id="wiz-issues"></div>
+    <div class="row navrow">
+      <button type="button" id="wiz-back">&larr; Back</button>
+      <span class="spacer"></span>
+      <button type="button" class="link" id="wiz-reset">Start over</button>
+      <button type="button" class="primary" id="wiz-next">Next &rarr;</button>
+    </div>
+  </section>
+</main>
+
+<main id="bulk" hidden>
   <div>
     <section class="card">
       <h2><span class="step">1</span>Customer details</h2>
@@ -1102,6 +1140,17 @@ module.exports = { TITLE, build, readFilled };
   }
 
   const hasAny = (data, p) => Object.keys(data).some(k => k.startsWith(p + '_') && data[k]);
+  const nomineeCountOf = c => Math.max(1, ...[1, 2, 3, 4].filter(i => hasAny(c.data, `n${i}`)), c.extraNominees || 0);
+  const trusteeCountOf = c => Math.max(0, ...[1, 2].filter(i => hasAny(c.data, `t${i}`)), c.extraTrustees || 0);
+
+  function removePerson(c, p) {
+    Object.keys(c.data).forEach(k => { if (k.startsWith(p + '_')) delete c.data[k]; });
+    // Shift later people up so there are no gaps (e.g. remove nominee 2 of 3).
+    const kind = p[0], max = kind === 'n' ? 4 : 2;
+    for (let i = Number(p.slice(1)) + 1; i <= max; i++)
+      Object.keys(c.data).filter(k => k.startsWith(`${kind}${i}_`)).forEach(k => { c.data[`${kind}${i - 1}_` + k.slice(3)] = c.data[k]; delete c.data[k]; });
+    if (kind === 'n') c.extraNominees = Math.max(1, nomineeCountOf(c) - 1); else c.extraTrustees = Math.max(0, trusteeCountOf(c) - 1);
+  }
 
   function renderEditor() {
     const c = clients.get(current);
@@ -1109,8 +1158,8 @@ module.exports = { TITLE, build, readFilled };
     if (!c) { ed.innerHTML = ''; $('#editor-wrap').hidden = true; return; }
     $('#editor-wrap').hidden = false;
     const d = c.data;
-    const nomineeCount = Math.max(1, ...[1, 2, 3, 4].filter(i => hasAny(d, `n${i}`)), c.extraNominees || 0);
-    const trusteeCount = Math.max(0, ...[1, 2].filter(i => hasAny(d, `t${i}`)), c.extraTrustees || 0);
+    const nomineeCount = nomineeCountOf(c);
+    const trusteeCount = trusteeCountOf(c);
     const witnessFull = c.witnessFull || hasAny(d, 'witness_nric') || hasAny(d, 'witness_address');
 
     let html = `
@@ -1160,6 +1209,10 @@ module.exports = { TITLE, build, readFilled };
     ['manual', 'Done by hand', 'man'],
     ['info', 'For your information', 'info'],
   ];
+  const issuesHtml = issues => LEVELS.map(([lvl, title, cls]) => {
+    const items = issues.filter(i => i.level === lvl);
+    return items.length ? `<div class="grp ${cls}"><h4>${title} (${items.length})</h4><ul>${items.map(i => `<li><b>${esc(i.where)}:</b> ${esc(i.msg)}</li>`).join('')}</ul></div>` : '';
+  }).join('');
   function currentResult() {
     const c = clients.get(current);
     const res = nomination.build(c.data);
@@ -1173,10 +1226,7 @@ module.exports = { TITLE, build, readFilled };
     const errors = res.issues.filter(i => i.level === 'error').length;
     $('#checks').innerHTML = `
       <div class="summary"><b>${res.filled.length}</b> items will be filled · <b class="${errors ? 'tx-err' : 'tx-ok'}">${errors}</b> to fix</div>
-      ${LEVELS.map(([lvl, title, cls]) => {
-        const items = res.issues.filter(i => i.level === lvl);
-        return items.length ? `<div class="grp ${cls}"><h4>${title} (${items.length})</h4><ul>${items.map(i => `<li><b>${esc(i.where)}:</b> ${esc(i.msg)}</li>`).join('')}</ul></div>` : '';
-      }).join('')}`;
+      ${issuesHtml(res.issues)}`;
     $('#btn-preview').disabled = errors > 0;
     $('#btn-preview').title = errors ? 'Fix the items in red first' : '';
     renderClientList();
@@ -1384,6 +1434,26 @@ module.exports = { TITLE, build, readFilled };
     $('#btn-download').disabled = true;
   }
 
+  async function renderPages(bytes, pagesEl) {
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+    pagesEl.innerHTML = '';
+    const width = Math.min(pagesEl.clientWidth || 800, 900);
+    for (let p = 1; p <= Math.min(doc.numPages, 5); p++) {
+      const page = await doc.getPage(p);
+      const base = page.getViewport({ scale: 1 });
+      const scale = (width / base.width) * (window.devicePixelRatio || 1);
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      canvas.style.width = '100%';
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp, annotationMode: pdfjsLib.AnnotationMode.ENABLE }).promise;
+      const fig = document.createElement('figure');
+      fig.innerHTML = `<figcaption>Page ${p}</figcaption>`;
+      fig.prepend(canvas);
+      pagesEl.append(fig);
+    }
+  }
+
   async function preview() {
     const res = currentResult();
     if (res.issues.some(i => i.level === 'error')) return;
@@ -1391,25 +1461,8 @@ module.exports = { TITLE, build, readFilled };
     $('#btn-preview').textContent = 'Building preview…';
     try {
       previewBytes = await fillBytes(templateBytes.slice(), res);
-      const doc = await pdfjsLib.getDocument({ data: previewBytes.slice(), isEvalSupported: false }).promise;
-      const pagesEl = $('#pages');
-      pagesEl.innerHTML = '';
-      const width = Math.min(pagesEl.clientWidth || 800, 900);
-      for (let p = 1; p <= Math.min(doc.numPages, 5); p++) {
-        const page = await doc.getPage(p);
-        const base = page.getViewport({ scale: 1 });
-        const scale = (width / base.width) * (window.devicePixelRatio || 1);
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = vp.width; canvas.height = vp.height;
-        canvas.style.width = '100%';
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp, annotationMode: pdfjsLib.AnnotationMode.ENABLE }).promise;
-        const fig = document.createElement('figure');
-        fig.innerHTML = `<figcaption>Page ${p}</figcaption>`;
-        fig.prepend(canvas);
-        pagesEl.append(fig);
-      }
       $('#preview-wrap').hidden = false;
+      await renderPages(previewBytes, $('#pages'));
       $('#preview-wrap').scrollIntoView({ behavior: 'smooth' });
       log(`Previewed form for ${keyLabel()}`);
     } catch (e) {
@@ -1434,6 +1487,157 @@ module.exports = { TITLE, build, readFilled };
     log(`APPROVED & downloaded ${name}${missing ? ` (${missing} item(s) left to complete by hand)` : ''}`);
   }
 
+  // ---------- step-by-step fill-in (the default tab) ----------
+  const wiz = { data: {}, step: 0, bytes: null, saved: true, seen: new Set() };
+  const WSTEPS = [
+    { title: 'Policy & policyowner', hint: `Copy the details from the customer's NRIC and policy schedule.
+      <ul><li>Leave anything you don't know empty. That box stays blank so it can be handwritten later.</li>
+      <li>Use the Proposal No. only if the policy has not been issued yet.</li></ul>` },
+    { title: 'Nominees', hint: `Nominees receive the policy money when the policyowner passes away.
+      <ul><li>Add up to 4 nominees. Their shares must add up to exactly 100% (a single nominee gets 100% automatically).</li>
+      <li>A non-Muslim policyowner nominating a spouse, child or parent creates a <b>trust policy</b>.</li></ul>` },
+    { title: 'Trustee', hint: `<b>Optional.</b> A trustee looks after the money for the nominees, e.g. when they are young.
+      <ul><li>A Muslim policyowner should not appoint a trustee.</li>
+      <li>Up to 2 trustees. A trustee must be 18 or over and cannot be the policyowner.</li></ul>` },
+    { title: 'Witness', hint: `The person who watches the policyowner sign, usually the agent.
+      <ul><li>For an agent, the name and IAC No. are enough. Otherwise add the witness's NRIC and address.</li>
+      <li>The witness can't be the policyowner, a nominee or a trustee.</li></ul>` },
+    { title: 'Check & download', hint: `Fix anything in red, then preview the form, tick the box and download it.
+      Signatures and signing dates are done by hand in front of the witness.` },
+  ];
+  const stepOfIssue = w => /^Polic/.test(w) ? 0 : /^Nominee/.test(w) ? 1 : /^(Trustee|Part 2)/.test(w) ? 2 : /^Witness/.test(w) ? 3 : 4;
+  const wizIssues = () => nomination.build(wiz.data).issues;
+  const fields = (list, d) => `<div class="grid">${list.map(fd => input(fd, d)).join('')}</div>`;
+
+  function wizFormHtml(step) {
+    const d = wiz.data;
+    if (step === 0) return fields([
+      f('policy_no', 'Policy No.'), f('proposal_no', 'Proposal No. (only if no policy no. yet)'),
+      f('owner_name', 'Policyowner full name (as per NRIC/Passport)', { wide: true, upper: true }),
+      f('owner_nric', 'NRIC (12 digits) or Passport No.', { ph: '640330-10-1234' }),
+      f('owner_dob', 'Date of birth', { ph: 'DD/MM/YYYY' }),
+      f('owner_muslim', 'Is the policyowner a Muslim?', { sel: SEL.yesno }),
+      f('owner_status', 'Marital status', { sel: SEL.status }),
+      f('owner_children', 'Number of children', { ph: '0 if none' }),
+    ], d);
+    if (step === 1) {
+      const n = nomineeCountOf(wiz);
+      let h = '';
+      for (let i = 1; i <= n; i++)
+        h += `<fieldset><legend>Nominee ${i}${n > 1 ? ` <button type="button" class="link" data-wiz-remove="n${i}">Remove</button>` : ''}</legend>${fields(personFields(`n${i}`, { nominee: true }), d)}</fieldset>`;
+      return h + (n < 4 ? `<button type="button" class="ghost" data-wiz="add-nominee">+ Add another nominee</button>` : '');
+    }
+    if (step === 2) {
+      const n = trusteeCountOf(wiz);
+      if (!n) return `<p>No trustee will be appointed, so Part 2 of the form stays blank.</p><button type="button" class="ghost" data-wiz="add-trustee">+ Appoint a trustee</button>`;
+      let h = fields([f('trust_action', 'What should this form do?', { sel: SEL.trust, wide: true })], d);
+      for (let i = 1; i <= n; i++)
+        h += `<fieldset style="margin-top:12px"><legend>Trustee ${i} <button type="button" class="link" data-wiz-remove="t${i}">Remove</button></legend>${fields(personFields(`t${i}`, { nominee: false }), d)}</fieldset>`;
+      return h + (n < 2 ? `<button type="button" class="ghost" data-wiz="add-trustee">+ Add a second trustee</button>` : '');
+    }
+    if (step === 3) {
+      const full = wiz.witnessFull || hasAny(d, 'witness_nric') || hasAny(d, 'witness_address');
+      return fields([
+        f('witness_name', 'Witness full name', { wide: true, upper: true }), f('witness_iac', 'Agent IAC No. (if the witness is an agent)'),
+        ...(full ? [f('witness_nric', 'Witness NRIC'), f('witness_dob', 'Witness date of birth', { ph: 'DD/MM/YYYY' }),
+          f('witness_address', 'Witness address', { wide: true, upper: true }), f('witness_postcode', 'Postcode'),
+          f('witness_town', 'Town', { upper: true }), f('witness_country', 'Country', { upper: true })] : []),
+      ], d) + (full ? '' : `<button type="button" class="link" data-wiz="witness-full" style="margin-top:8px">The witness is not an agent? Add their NRIC and address</button>`);
+    }
+    return `<button type="button" class="primary" data-wiz="preview">Preview the filled form</button>
+      <div id="wiz-pages" style="margin-top:14px"></div>
+      <div id="wiz-approve" hidden>
+        <label class="approve"><input type="checkbox" id="wiz-confirm"> <span>I have checked this form against the customer's documents and approve it.</span></label>
+        <button type="button" class="primary" id="wiz-download" disabled>Download filled PDF</button>
+      </div>`;
+  }
+
+  function renderWizIssues() {
+    const all = wizIssues();
+    // Don't nag about a step until something was typed there or the user moved past it.
+    const shown = s => wiz.seen.has(s) || (s === 2 && wiz.seen.size > 0); // trustee advice depends on earlier answers
+    const errorsByStep = WSTEPS.map((_, s) => shown(s) ? all.filter(i => i.level === 'error' && stepOfIssue(i.where) === s).length : 0);
+    $('#wiz-steps').innerHTML = WSTEPS.map((s, i) => {
+      const bad = i < 4 && errorsByStep[i];
+      return `<li><button type="button" data-wiz-step="${i}" class="${i === wiz.step ? 'on' : ''}${bad ? ' bad' : ''}"${bad ? ` title="${bad} to fix"` : ''}>${i + 1}. ${s.title}${bad ? ' !' : ''}</button></li>`;
+    }).join('');
+    const mine = wiz.step === 4 ? all : shown(wiz.step) ? all.filter(i => stepOfIssue(i.where) === wiz.step && i.level !== 'missing') : [];
+    const errors = all.filter(i => i.level === 'error').length;
+    $('#wiz-issues').innerHTML = (wiz.step === 4
+      ? `<div class="summary" style="margin-top:14px">${errors ? `<b class="tx-err">${errors} item(s) to fix</b>. Click a step marked with "!" to correct it.` : '<b class="tx-ok">No errors.</b> Ready to preview.'}</div>`
+      : '') + issuesHtml(mine);
+    const pv = $('[data-wiz="preview"]');
+    if (pv) { pv.disabled = errors > 0; pv.title = errors ? 'Fix the items in red first' : ''; }
+  }
+
+  function renderWiz() {
+    const s = WSTEPS[wiz.step];
+    $('#wiz-title').innerHTML = `<span class="step">${wiz.step + 1}</span>${s.title}`;
+    $('#wiz-hint').innerHTML = s.hint;
+    $('#wiz-form').innerHTML = wizFormHtml(wiz.step);
+    $('#wiz-back').style.visibility = wiz.step ? '' : 'hidden';
+    $('#wiz-next').hidden = wiz.step === 4;
+    renderWizIssues();
+  }
+  function goStep(n) { wiz.seen.add(wiz.step); wiz.step =Math.max(0, Math.min(4, n)); wiz.bytes = null; renderWiz(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+  const wizLabel = () => `${wiz.data.policy_no || wiz.data.proposal_no || '(no policy no.)'} ${wiz.data.owner_name || ''}`.trim();
+  async function wizPreview(btn) {
+    const res = nomination.build(wiz.data);
+    if (res.issues.some(i => i.level === 'error')) return;
+    btn.disabled = true; btn.textContent = 'Building preview…';
+    try {
+      wiz.bytes = await fillBytes(templateBytes.slice(), res);
+      await renderPages(wiz.bytes, $('#wiz-pages'));
+      $('#wiz-approve').hidden = false;
+      $('#wiz-approve').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      log(`Previewed form for ${wizLabel()} (step by step)`);
+    } catch (e) {
+      alert('Could not build the form: ' + e.message);
+    } finally { btn.disabled = false; btn.textContent = 'Preview again'; }
+  }
+
+  $('#wiz-form').addEventListener('input', e => {
+    const key = e.target.dataset.key;
+    if (!key) return;
+    const v = e.target.value.trim();
+    if (v) wiz.data[key] = v; else delete wiz.data[key];
+    wiz.bytes = null; wiz.saved = false; wiz.seen.add(wiz.step);
+    clearTimeout(t); t = setTimeout(renderWizIssues, 400);
+  });
+  $('#wiz-form').addEventListener('click', e => {
+    const act = e.target.dataset.wiz;
+    if (act === 'add-nominee') { wiz.extraNominees = nomineeCountOf(wiz) + 1; renderWiz(); }
+    else if (act === 'add-trustee') { wiz.extraTrustees = trusteeCountOf(wiz) + 1; renderWiz(); }
+    else if (act === 'witness-full') { wiz.witnessFull = true; renderWiz(); }
+    else if (act === 'preview') wizPreview(e.target);
+    else if (e.target.dataset.wizRemove) { removePerson(wiz, e.target.dataset.wizRemove); renderWiz(); }
+    else if (e.target.id === 'wiz-download' && wiz.bytes && $('#wiz-confirm').checked) {
+      const name = fileName(wiz.data);
+      saveBlob(new Blob([wiz.bytes], { type: 'application/pdf' }), name);
+      wiz.saved = true;
+      const missing = wizIssues().filter(i => i.level === 'missing').length;
+      log(`APPROVED & downloaded ${name} (step by step)${missing ? ` (${missing} item(s) left to complete by hand)` : ''}`);
+    }
+  });
+  $('#wiz-form').addEventListener('change', e => { if (e.target.id === 'wiz-confirm') $('#wiz-download').disabled = !e.target.checked || !wiz.bytes; });
+  $('#wiz-steps').addEventListener('click', e => { const b = e.target.closest('[data-wiz-step]'); if (b) goStep(Number(b.dataset.wizStep)); });
+  $('#wiz-next').addEventListener('click', () => goStep(wiz.step + 1));
+  $('#wiz-back').addEventListener('click', () => goStep(wiz.step - 1));
+  $('#wiz-reset').addEventListener('click', () => {
+    if (Object.keys(wiz.data).length && !confirm('Clear everything typed into this form and start again?')) return;
+    Object.assign(wiz, { data: {}, extraNominees: 0, extraTrustees: 0, witnessFull: false, bytes: null, saved: true, seen: new Set(), step: 0 });
+    renderWiz();
+  });
+  window.addEventListener('beforeunload', e => { if (!wiz.saved && Object.keys(wiz.data).length) { e.preventDefault(); e.returnValue = ''; } });
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    document.querySelectorAll('.tab').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+    $('#wizard').hidden = b.dataset.tab !== 'wizard';
+    $('#bulk').hidden = b.dataset.tab !== 'bulk';
+  });
+
   // ---------- events ----------
   let t;
   $('#editor').addEventListener('input', e => {
@@ -1448,19 +1652,10 @@ module.exports = { TITLE, build, readFilled };
   });
   $('#editor').addEventListener('click', e => {
     const c = clients.get(current);
-    if (e.target.id === 'add-nominee') { c.extraNominees = Math.max(c.extraNominees || 1, ...[1, 2, 3, 4].filter(i => hasAny(c.data, `n${i}`))) + 1; renderEditor(); }
-    else if (e.target.id === 'add-trustee') { c.extraTrustees = Math.max(c.extraTrustees || 0, ...[1, 2].filter(i => hasAny(c.data, `t${i}`))) + 1; renderEditor(); }
+    if (e.target.id === 'add-nominee') { c.extraNominees = nomineeCountOf(c) + 1; renderEditor(); }
+    else if (e.target.id === 'add-trustee') { c.extraTrustees = trusteeCountOf(c) + 1; renderEditor(); }
     else if (e.target.id === 'witness-full') { c.witnessFull = true; renderEditor(); }
-    else if (e.target.dataset.remove) {
-      const p = e.target.dataset.remove;
-      Object.keys(c.data).forEach(k => { if (k.startsWith(p + '_')) delete c.data[k]; });
-      // Shift later people up so there are no gaps (e.g. remove nominee 2 of 3).
-      const kind = p[0], max = kind === 'n' ? 4 : 2;
-      for (let i = Number(p.slice(1)) + 1; i <= max; i++)
-        Object.keys(c.data).filter(k => k.startsWith(`${kind}${i}_`)).forEach(k => { c.data[`${kind}${i - 1}_` + k.slice(3)] = c.data[k]; delete c.data[k]; });
-      if (kind === 'n') c.extraNominees = Math.max(1, (c.extraNominees || 1) - 1); else c.extraTrustees = Math.max(0, (c.extraTrustees || 0) - 1);
-      clearPreview(); renderEditor(); renderChecks();
-    }
+    else if (e.target.dataset.remove) { removePerson(c, e.target.dataset.remove); clearPreview(); renderEditor(); renderChecks(); }
   });
   $('#cust').addEventListener('click', e => {
     const b = e.target.closest('[data-client]');
@@ -1514,7 +1709,8 @@ module.exports = { TITLE, build, readFilled };
     Object.assign(document.createElement('a'), { href: url, download: 'nomination-filler-log.txt' }).click();
   });
 
-  window.__app = { loadFiles, clients, select }; // used for testing
+  window.__app = { loadFiles, clients, select, wiz }; // used for testing
+  renderWiz();
   renderLog();
   renderChecks();
 })();
