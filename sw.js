@@ -1,6 +1,6 @@
 // Lets the installed app open without internet. Always tries the network first so updates show up,
 // and falls back to the saved copy when offline.
-const CACHE = 'nomination-filler-v1';
+const CACHE = 'nomination-filler-v2';
 const FILES = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
