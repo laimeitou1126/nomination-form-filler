@@ -4,6 +4,13 @@
 
 **Web link:** https://laimeitou1126.github.io/nomination-form-filler/
 
+## Put it on your phone as an app
+
+- **Android (Chrome):** open the web link, tap the **⋮** menu, then **Add to Home screen** (or **Install app**), then **Install**.
+- **iPhone (Safari only, not Chrome):** open the web link, tap the **Share** button (the square with an arrow), then **Add to Home Screen**, then **Add**.
+
+The **Nomination** icon appears on your home screen and opens full screen like a normal app. After the first time it opens, it also works without internet. Downloaded PDFs go to the phone's Downloads (Android) or the **Files** app (iPhone).
+
 ## Fill in one form, step by step (the easiest way)
 
 The app opens on **Fill in a form, step by step**. It asks for the details in 5 short steps:
