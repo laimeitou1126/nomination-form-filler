@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nomination Form Filler</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f4fd1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Nomination">
 <style>
 :root{--bg:#f4f6f9;--card:#fff;--fg:#1b2333;--mute:#5c6678;--line:#dde2ea;--accent:#1f4fd1;--accent-fg:#fff;
 --err:#b42318;--errbg:#fef3f2;--warn:#9a5b06;--warnbg:#fff8e6;--miss:#3545a8;--missbg:#eef1fd;--ok:#067647;--okbg:#ecfdf3;--input:#fff}
@@ -1734,6 +1741,9 @@ module.exports = { TITLE, build, readFilled };
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
     Object.assign(document.createElement('a'), { href: url, download: 'nomination-filler-log.txt' }).click();
   });
+
+  // Installed on a phone/PC from the web link: keep a copy so it opens offline. (Not when opened as a local file.)
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
   window.__app = { loadFiles, clients, select, wiz }; // used for testing
   renderWiz();

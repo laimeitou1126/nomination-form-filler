@@ -1,0 +1,15 @@
+{
+  "name": "Nomination Form Filler",
+  "short_name": "Nomination",
+  "description": "Fill in the Great Eastern nomination form step by step and download it as a PDF.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#1f4fd1",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
