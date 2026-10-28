@@ -78,6 +78,12 @@ main.wiz{display:block;max-width:860px}
 .navrow .spacer{flex:1}
 .wiz .grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .wiz input,.wiz select{padding:10px 11px;font-size:16px}
+.opts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.opt{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;background:var(--input);color:var(--fg);font-size:14px}
+.opt:has(input:checked){border-color:var(--accent);background:var(--missbg);font-weight:600}
+.opt input{margin:0;width:18px;height:18px;padding:0;accent-color:var(--accent)}
+.kidsnum{width:96px}
+.kidsnum:disabled{opacity:.5}
 </style>
 </head>
 <body>
@@ -1102,8 +1108,6 @@ module.exports = { TITLE, build, readFilled };
 
   // ---------- field definitions for the edit screen ----------
   const SEL = {
-    yesno: ['', 'No', 'Yes'],
-    status: ['', 'Married', 'Single', 'Divorced', 'Widowed'],
     gender: ['', 'Male', 'Female'],
     telType: ['', 'House', 'Handphone', 'Office'],
     trust: [['', '—'], ['appoint', 'Appoint trustee(s)'], ['appoint_additional', 'Add trustee(s) to existing'],
@@ -1124,10 +1128,16 @@ module.exports = { TITLE, build, readFilled };
     f(`${p}_postcode`, 'Postcode'), f(`${p}_town`, 'Town', { upper: true }), f(`${p}_country`, 'Country', { ph: 'Malaysia', upper: true }),
   ];
 
+  // Tick-box style choice, like the paper form. Accepts short forms from uploads too ("Y", "M"...).
+  const picked = (v, o) => v && (v.toLowerCase() === o.toLowerCase() || (v.length === 1 && o[0].toLowerCase() === v.toLowerCase()));
   function input(fd, data) {
     const v = data[fd.key] ?? '';
     const id = `in-${fd.key}`;
     let ctl;
+    if (fd.radio) {
+      return `<div class="fld${fd.wide ? ' wide' : ''}" role="radiogroup" aria-label="${esc(fd.label)}"><span>${esc(fd.label)}</span><div class="opts">${fd.radio.map(o =>
+        `<label class="opt"><input type="radio" name="r-${fd.key}" data-key="${fd.key}" value="${esc(o)}"${picked(v, o) ? ' checked' : ''}>${esc(o)}</label>`).join('')}</div></div>`;
+    }
     if (fd.sel) {
       ctl = `<select id="${id}" data-key="${fd.key}">${fd.sel.map(o => {
         const [val, txt] = Array.isArray(o) ? o : [o, o || '—'];
@@ -1138,6 +1148,36 @@ module.exports = { TITLE, build, readFilled };
     }
     return `<label class="fld${fd.wide ? ' wide' : ''}"><span>${esc(fd.label)}</span>${ctl}</label>`;
   }
+
+  // "Do you have any children?  No / Yes, no. of children: [ ]" -> owner_children = '0' | number | 'Yes'
+  function childrenCtl(d) {
+    const v = String(d.owner_children ?? '');
+    const no = v === '0' || /^(n|no)$/i.test(v);
+    const yes = !!v && !no;
+    const num = /^\d+$/.test(v) && !no ? v : '';
+    return `<div class="fld wide" role="radiogroup" aria-label="Do you have any children?"><span>5) Do you have any children?</span><div class="opts kids">
+      <label class="opt"><input type="radio" name="r-kids" data-children value="No"${no ? ' checked' : ''}>No</label>
+      <label class="opt"><input type="radio" name="r-kids" data-children value="Yes"${yes ? ' checked' : ''}>Yes, no. of children is:</label>
+      <input type="number" min="1" max="99" inputmode="numeric" data-children class="kidsnum" value="${num}" placeholder="e.g. 2" aria-label="Number of children"${yes ? '' : ' disabled'}></div></div>`;
+  }
+  // The key and value an edited control stands for (handles the children pair).
+  function readCtl(el) {
+    if (el.dataset.key) return [el.dataset.key, el.value.trim()];
+    if (!('children' in el.dataset)) return null;
+    const box = el.closest('.kids'), num = box.querySelector('.kidsnum');
+    if (el === num && num.value) box.querySelector('[value="Yes"]').checked = true;
+    const yn = box.querySelector('input[type=radio]:checked')?.value;
+    num.disabled = yn !== 'Yes';
+    return ['owner_children', !yn ? '' : yn === 'No' ? '0' : num.value.trim() || 'Yes'];
+  }
+  const ownerFields = () => [
+    f('owner_name', '1) Full name as per NRIC/Passport', { wide: true, upper: true }),
+    f('owner_nric', '2) NRIC (12 digits) / Passport No.', { ph: '640330-10-1234' }),
+    f('owner_muslim', '3) Are you a Muslim?', { radio: ['No', 'Yes'] }),
+    f('owner_status', '4) Status', { radio: ['Married', 'Single', 'Divorced', 'Widowed'], wide: true }),
+  ];
+  const ownerHtml = d => `<div class="grid">${ownerFields().map(fd => input(fd, d)).join('')}${childrenCtl(d)}
+    ${input(f('owner_dob', 'Date of birth (not printed on the form, used to check the NRIC)', { ph: 'DD/MM/YYYY' }), d)}</div>`;
 
   const hasAny = (data, p) => Object.keys(data).some(k => k.startsWith(p + '_') && data[k]);
   const nomineeCountOf = c => Math.max(1, ...[1, 2, 3, 4].filter(i => hasAny(c.data, `n${i}`)), c.extraNominees || 0);
@@ -1166,14 +1206,7 @@ module.exports = { TITLE, build, readFilled };
       <fieldset><legend>Policy</legend><div class="grid">
         ${input(f('policy_no', 'Policy No.'), d)}${input(f('proposal_no', 'Proposal No. (if no policy yet)'), d)}
       </div></fieldset>
-      <fieldset><legend>Policyowner</legend><div class="grid">
-        ${input(f('owner_name', 'Full name as per NRIC/Passport', { wide: true, upper: true }), d)}
-        ${input(f('owner_nric', 'NRIC (12 digits) or Passport No.'), d)}
-        ${input(f('owner_dob', 'Date of birth (for checks)', { ph: 'DD/MM/YYYY' }), d)}
-        ${input(f('owner_muslim', 'Muslim?', { sel: SEL.yesno }), d)}
-        ${input(f('owner_status', 'Marital status', { sel: SEL.status }), d)}
-        ${input(f('owner_children', 'Number of children', { ph: '0 if none' }), d)}
-      </div></fieldset>`;
+      <fieldset><legend>Details of proposer / policyowner</legend>${ownerHtml(d)}</fieldset>`;
     for (let i = 1; i <= nomineeCount; i++) {
       html += `<fieldset><legend>Nominee ${i}${i > 1 ? ` <button type="button" class="link" data-remove="n${i}">Remove</button>` : ''}</legend>
         <div class="grid">${personFields(`n${i}`, { nominee: true }).map(fd => input(fd, d)).join('')}</div></fieldset>`;
@@ -1511,15 +1544,8 @@ module.exports = { TITLE, build, readFilled };
 
   function wizFormHtml(step) {
     const d = wiz.data;
-    if (step === 0) return fields([
-      f('policy_no', 'Policy No.'), f('proposal_no', 'Proposal No. (only if no policy no. yet)'),
-      f('owner_name', 'Policyowner full name (as per NRIC/Passport)', { wide: true, upper: true }),
-      f('owner_nric', 'NRIC (12 digits) or Passport No.', { ph: '640330-10-1234' }),
-      f('owner_dob', 'Date of birth', { ph: 'DD/MM/YYYY' }),
-      f('owner_muslim', 'Is the policyowner a Muslim?', { sel: SEL.yesno }),
-      f('owner_status', 'Marital status', { sel: SEL.status }),
-      f('owner_children', 'Number of children', { ph: '0 if none' }),
-    ], d);
+    if (step === 0) return fields([f('policy_no', 'Policy No.'), f('proposal_no', 'Proposal No. (only if no policy no. yet)')], d)
+      + `<fieldset style="margin-top:14px"><legend>Details of proposer / policyowner</legend>${ownerHtml(d)}</fieldset>`;
     if (step === 1) {
       const n = nomineeCountOf(wiz);
       let h = '';
@@ -1598,9 +1624,9 @@ module.exports = { TITLE, build, readFilled };
   }
 
   $('#wiz-form').addEventListener('input', e => {
-    const key = e.target.dataset.key;
-    if (!key) return;
-    const v = e.target.value.trim();
+    const kv = readCtl(e.target);
+    if (!kv) return;
+    const [key, v] = kv;
     if (v) wiz.data[key] = v; else delete wiz.data[key];
     wiz.bytes = null; wiz.saved = false; wiz.seen.add(wiz.step);
     clearTimeout(t); t = setTimeout(renderWizIssues, 400);
@@ -1641,10 +1667,10 @@ module.exports = { TITLE, build, readFilled };
   // ---------- events ----------
   let t;
   $('#editor').addEventListener('input', e => {
-    const key = e.target.dataset.key;
-    if (!key) return;
+    const kv = readCtl(e.target);
+    if (!kv) return;
+    const [key, v] = kv;
     const c = clients.get(current);
-    const v = e.target.value.trim();
     if (v) c.data[key] = v; else delete c.data[key];
     if (approved.delete(current)) log(`Approval removed for ${keyLabel()} (details edited)`);
     clearPreview();
